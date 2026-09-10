@@ -6,312 +6,85 @@ import { DirectionalLight } from "@babylonjs/core/Lights/directionalLight";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
-import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh";
+import type { Mesh } from "@babylonjs/core/Meshes/mesh";
 
 export type GameHandle = { scene: Scene; dispose: () => void };
-
+type Materials = Record<string, StandardMaterial>;
 type ActionDetail = { type: string; value?: string };
 
-type Materials = Record<string, StandardMaterial>;
+type SaveState = { level: number; xp: number; coins: number; region: string; stars: number; shells: number; crystals: number; gems: number; unlocked: string[]; daily: number[] };
+const SAVE_KEY = "wonderworld-save-v2";
+const defaultSave: SaveState = { level: 3, xp: 280, coins: 620, region: "WonderTown", stars: 0, shells: 0, crystals: 0, gems: 0, unlocked: ["WonderTown", "Adventure Forest", "Sunny Beach", "Sky Mountain", "Fun Park"], daily: [0, 0, 0, 0, 0] };
 
-function mat(scene: Scene, name: string, hex: string, roughness = 0.8) {
-  const m = new StandardMaterial(name, scene);
-  m.diffuseColor = Color3.FromHexString(hex);
-  m.specularColor = new Color3(0.08, 0.1, 0.12);
-  m.roughness = roughness;
-  return m;
-}
-
-function emit(name: string, detail: Record<string, unknown>) {
-  window.dispatchEvent(new CustomEvent(name, { detail }));
-}
-
-function box(scene: Scene, name: string, size: { w: number; h: number; d: number }, pos: Vector3, material: StandardMaterial, parent?: TransformNode) {
-  const mesh = MeshBuilder.CreateBox(name, { width: size.w, height: size.h, depth: size.d }, scene);
-  mesh.position = pos;
-  mesh.material = material;
-  if (parent) mesh.parent = parent;
-  return mesh;
-}
-
-function tree(scene: Scene, materials: Materials, x: number, z: number, scale = 1) {
-  const root = new TransformNode("tree-root", scene);
-  root.position = new Vector3(x, 0, z);
-  const trunk = MeshBuilder.CreateCylinder("tree-trunk", { diameter: 0.42 * scale, height: 1.8 * scale, tessellation: 8 }, scene);
-  trunk.position.y = 0.9 * scale;
-  trunk.material = materials.bark;
-  trunk.parent = root;
-  const canopy = MeshBuilder.CreateSphere("tree-canopy", { diameter: 2.3 * scale, segments: 8 }, scene);
-  canopy.position.y = 2.15 * scale;
-  canopy.material = materials.leaf;
-  canopy.parent = root;
-  const canopy2 = MeshBuilder.CreateSphere("tree-canopy-small", { diameter: 1.6 * scale, segments: 8 }, scene);
-  canopy2.position.set(0.55 * scale, 2.7 * scale, 0.1 * scale);
-  canopy2.material = materials.leaf2;
-  canopy2.parent = root;
-  return root;
-}
-
-function building(scene: Scene, materials: Materials, x: number, z: number, color: StandardMaterial, labelColor: StandardMaterial, scale = 1) {
-  const root = new TransformNode("building", scene);
-  root.position = new Vector3(x, 0, z);
-  box(scene, "building-body", { w: 3.2 * scale, h: 2.4 * scale, d: 2.8 * scale }, new Vector3(0, 1.2 * scale, 0), color, root);
-  const roof = MeshBuilder.CreateCylinder("building-roof", { diameter: 3.5 * scale, height: 0.75 * scale, tessellation: 4 }, scene);
-  roof.rotation.y = Math.PI / 4;
-  roof.position.y = 2.72 * scale;
-  roof.material = labelColor;
-  roof.parent = root;
-  box(scene, "door", { w: 0.55 * scale, h: 1.05 * scale, d: 0.12 * scale }, new Vector3(0, 0.55 * scale, -1.44 * scale), materials.door, root);
-  [-0.9, 0.9].forEach((wx) => box(scene, "window", { w: 0.5 * scale, h: 0.55 * scale, d: 0.1 * scale }, new Vector3(wx * scale, 1.5 * scale, -1.44 * scale), materials.window, root));
-  return root;
-}
-
-function createPlayer(scene: Scene, materials: Materials) {
-  const root = new TransformNode("explorer", scene);
-  root.position = new Vector3(0, 0, 5.5);
-  const feet = box(scene, "explorer-feet", { w: 0.72, h: 0.25, d: 0.48 }, new Vector3(0, 0.14, 0), materials.shoes, root);
-  feet.rotation.y = Math.PI / 2;
-  const body = MeshBuilder.CreateCapsule("explorer-body", { height: 1.25, radius: 0.43, tessellation: 8 }, scene);
-  body.position.y = 1.02;
-  body.material = materials.shirt;
-  body.parent = root;
-  const head = MeshBuilder.CreateSphere("explorer-head", { diameter: 0.9, segments: 12 }, scene);
-  head.position.y = 1.95;
-  head.material = materials.skin;
-  head.parent = root;
-  const hair = MeshBuilder.CreateSphere("explorer-hair", { diameter: 0.94, segments: 12 }, scene);
-  hair.scaling.y = 0.52;
-  hair.position.set(0, 2.3, 0.02);
-  hair.material = materials.hair;
-  hair.parent = root;
-  const backpack = box(scene, "explorer-backpack", { w: 0.68, h: 0.82, d: 0.25 }, new Vector3(0, 1.15, 0.46), materials.backpack, root);
-  backpack.rotation.x = -0.08;
-  const eye1 = MeshBuilder.CreateSphere("eye", { diameter: 0.11 }, scene);
-  eye1.position.set(-0.18, 2, -0.4);
-  eye1.material = materials.eye;
-  eye1.parent = root;
-  const eye2 = eye1.clone("eye2");
-  if (eye2) { eye2.position.x = 0.18; eye2.parent = root; }
-  return root;
-}
-
-function createPet(scene: Scene, materials: Materials) {
-  const root = new TransformNode("pet", scene);
-  root.position = new Vector3(1.45, 0, 6.15);
-  const body = MeshBuilder.CreateSphere("pet-body", { diameter: 0.9, segments: 10 }, scene);
-  body.scaling.y = 0.72;
-  body.position.y = 0.52;
-  body.material = materials.pet;
-  body.parent = root;
-  const head = MeshBuilder.CreateSphere("pet-head", { diameter: 0.78, segments: 10 }, scene);
-  head.position.set(0, 1.02, -0.03);
-  head.material = materials.pet;
-  head.parent = root;
-  [-0.3, 0.3].forEach((x) => {
-    const ear = MeshBuilder.CreateCylinder("pet-ear", { diameter: 0.25, height: 0.36, tessellation: 6 }, scene);
-    ear.position.set(x, 1.4, 0);
-    ear.rotation.z = x < 0 ? -0.3 : 0.3;
-    ear.material = materials.petAccent;
-    ear.parent = root;
-  });
-  return root;
-}
-
-function coin(scene: Scene, materials: Materials, pos: Vector3) {
-  const c = MeshBuilder.CreateCylinder("wonder-coin", { diameter: 0.48, height: 0.12, tessellation: 16 }, scene);
-  c.rotation.x = Math.PI / 2;
-  c.position = pos;
-  c.material = materials.coin;
-  return c;
-}
-
-function star(scene: Scene, materials: Materials, pos: Vector3) {
-  const s = MeshBuilder.CreateTorus("lost-star", { diameter: 0.48, thickness: 0.14, tessellation: 8 }, scene);
-  s.position = pos;
-  s.rotation.x = Math.PI / 2;
-  s.material = materials.star;
-  return s;
-}
+function loadSave(): SaveState { try { return { ...defaultSave, ...JSON.parse(localStorage.getItem(SAVE_KEY) || "{}") }; } catch { return { ...defaultSave }; } }
+function persist(save: SaveState) { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* storage can be unavailable in preview */ } }
+function emit(name: string, detail: Record<string, unknown>) { window.dispatchEvent(new CustomEvent(name, { detail })); }
+function mat(scene: Scene, name: string, hex: string, roughness = 0.8) { const m = new StandardMaterial(name, scene); m.diffuseColor = Color3.FromHexString(hex); m.specularColor = new Color3(0.06, 0.08, 0.1); m.roughness = roughness; return m; }
+function box(scene: Scene, name: string, size: { w: number; h: number; d: number }, pos: Vector3, material: StandardMaterial, parent?: TransformNode) { const mesh = MeshBuilder.CreateBox(name, { width: size.w, height: size.h, depth: size.d }, scene); mesh.position = pos; mesh.material = material; if (parent) mesh.parent = parent; return mesh; }
+function tree(scene: Scene, materials: Materials, x: number, z: number, scale = 1, kind: "leaf" | "glow" = "leaf") { const root = new TransformNode("tree", scene); root.position.set(x, 0, z); const trunk = MeshBuilder.CreateCylinder("trunk", { diameter: 0.34 * scale, height: 1.6 * scale, tessellation: 7 }, scene); trunk.position.y = 0.8 * scale; trunk.material = materials.bark; trunk.parent = root; const crown = MeshBuilder.CreateSphere("crown", { diameter: 2 * scale, segments: 7 }, scene); crown.position.y = 2.05 * scale; crown.material = kind === "glow" ? materials.glowLeaf : materials.leaf; crown.parent = root; const crown2 = MeshBuilder.CreateSphere("crown-small", { diameter: 1.35 * scale, segments: 7 }, scene); crown2.position.set(0.45 * scale, 2.45 * scale, 0.12 * scale); crown2.material = kind === "glow" ? materials.glowLeaf2 : materials.leaf2; crown2.parent = root; return root; }
+function building(scene: Scene, materials: Materials, x: number, z: number, width: number, height: number, body: StandardMaterial, roof: StandardMaterial, sign: string, accent = false) { const root = new TransformNode("building", scene); root.position.set(x, 0, z); box(scene, "building-body", { w: width, h: height, d: width * 0.82 }, new Vector3(0, height / 2, 0), body, root); const roofMesh = MeshBuilder.CreateCylinder("roof", { diameter: width * 1.12, height: 0.72, tessellation: 4 }, scene); roofMesh.rotation.y = Math.PI / 4; roofMesh.position.y = height + 0.32; roofMesh.material = roof; roofMesh.parent = root; box(scene, "door", { w: 0.52, h: 1.1, d: 0.11 }, new Vector3(0, 0.55, -width * 0.42), materials.door, root); [-width * 0.27, width * 0.27].forEach((wx) => box(scene, "window", { w: 0.44, h: 0.46, d: 0.09 }, new Vector3(wx, Math.min(height - 0.55, 1.45), -width * 0.42), accent ? materials.windowGold : materials.window, root)); const plaque = box(scene, "sign", { w: Math.min(width * 0.62, 2.4), h: 0.38, d: 0.08 }, new Vector3(0, height + 0.92, -width * 0.42), accent ? materials.yellow : materials.white, root); plaque.metadata = { label: sign }; return root; }
+function npc(scene: Scene, materials: Materials, x: number, z: number, color: StandardMaterial, name: string, region: string) { const root = new TransformNode("npc", scene); root.position.set(x, 0, z); const body = MeshBuilder.CreateCapsule("npc-body", { height: 1.05, radius: 0.36, tessellation: 8 }, scene); body.position.y = 0.82; body.material = color; body.parent = root; const head = MeshBuilder.CreateSphere("npc-head", { diameter: 0.72, segments: 10 }, scene); head.position.y = 1.62; head.material = materials.skin; head.parent = root; const badge = MeshBuilder.CreateSphere("npc-badge", { diameter: 0.2, segments: 6 }, scene); badge.position.set(0, 1.18, -0.34); badge.material = materials.star; badge.parent = root; root.metadata = { name, region, dialogue: `${name} has a new adventure for you.` }; return root; }
+function coin(scene: Scene, materials: Materials, position: Vector3, type: "coin" | "star" | "shell" | "crystal" | "gem" = "coin") { const config = { coin: [0.45, materials.coin], star: [0.48, materials.star], shell: [0.46, materials.shell], crystal: [0.42, materials.crystal], gem: [0.5, materials.gem] }[type]; const c = MeshBuilder.CreateTorus(type, { diameter: config[0] as number, thickness: 0.12, tessellation: 8 }, scene); c.position = position; c.rotation.x = Math.PI / 2; c.material = config[1] as StandardMaterial; c.metadata = { collectibleType: type }; return c; }
+function bridge(scene: Scene, materials: Materials, x: number, z: number, rotation = 0) { const root = new TransformNode("bridge", scene); root.position.set(x, 0, z); root.rotation.y = rotation; for (let i = -3; i <= 3; i++) box(scene, "bridge-plank", { w: 0.82, h: 0.18, d: 1.2 }, new Vector3(i * 0.9, 0.46 + Math.abs(i) * 0.04, 0), materials.wood, root); [-0.54, 0.54].forEach((side) => box(scene, "bridge-rail", { w: 6.6, h: 0.4, d: 0.14 }, new Vector3(0, 0.82, side), materials.bark, root)); return root; }
+function makeRegionLabel(scene: Scene, materials: Materials, label: string, x: number, z: number, color: StandardMaterial) { const sign = box(scene, "region-sign", { w: 4.5, h: 1.2, d: 0.18 }, new Vector3(x, 2.3, z), color); sign.metadata = { label }; return sign; }
 
 export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement): Promise<GameHandle> {
-  const scene = new Scene(engine);
-  scene.clearColor = new Color4(0.54, 0.82, 0.98, 1);
-  scene.fogMode = Scene.FOGMODE_EXP2;
-  scene.fogDensity = 0.012;
-  scene.fogColor = new Color3(0.54, 0.82, 0.98);
+  const scene = new Scene(engine); scene.clearColor = new Color4(0.5, 0.8, 0.96, 1); scene.fogMode = Scene.FOGMODE_EXP2; scene.fogDensity = 0.006; scene.fogColor = new Color3(0.5, 0.8, 0.96);
+  const materials: Materials = { grass: mat(scene, "grass", "#72c98b"), grass2: mat(scene, "grass2", "#a5e1a0"), plaza: mat(scene, "plaza", "#efd2b1"), road: mat(scene, "road", "#a9c3cf"), water: mat(scene, "water", "#39c6df", 0.25), bark: mat(scene, "bark", "#8c5b46"), wood: mat(scene, "wood", "#bd8358"), leaf: mat(scene, "leaf", "#43af73"), leaf2: mat(scene, "leaf2", "#83d98a"), glowLeaf: mat(scene, "glowLeaf", "#61ddb7"), glowLeaf2: mat(scene, "glowLeaf2", "#cbf37d"), coral: mat(scene, "coral", "#ed8e7e"), mint: mat(scene, "mint", "#74d3bf"), yellow: mat(scene, "yellow", "#ffd267"), purple: mat(scene, "purple", "#a58bd8"), blue: mat(scene, "blue", "#6eaddd"), door: mat(scene, "door", "#365d6c"), window: mat(scene, "window", "#9ee8ec", 0.2), windowGold: mat(scene, "windowGold", "#ffe69b", 0.2), coin: mat(scene, "coin", "#ffd044", 0.22), star: mat(scene, "star", "#fff09a", 0.18), shell: mat(scene, "shell", "#fa9fb3", 0.25), crystal: mat(scene, "crystal", "#90e7f5", 0.18), gem: mat(scene, "gem", "#cf9dfa", 0.18), snow: mat(scene, "snow", "#f2fbff"), shirt: mat(scene, "shirt", "#27b0a5"), shoes: mat(scene, "shoes", "#f2a15e"), skin: mat(scene, "skin", "#f2b58b"), hair: mat(scene, "hair", "#604655"), backpack: mat(scene, "backpack", "#f1bd44"), eye: mat(scene, "eye", "#26364d"), pet: mat(scene, "pet", "#e8995d"), white: mat(scene, "white", "#ffffff") };
+  const hemi = new HemisphericLight("world-fill", new Vector3(0, 1, 0), scene); hemi.intensity = 0.62; hemi.diffuse = new Color3(1, 0.95, 0.85); const sun = new DirectionalLight("sun", new Vector3(-0.45, -1, 0.55), scene); sun.position = new Vector3(-25, 32, -24); sun.intensity = 0.72;
+  const camera = new ArcRotateCamera("third-person-camera", -Math.PI / 2.1, 1.08, 24, new Vector3(0, 1.4, 0), scene); camera.lowerRadiusLimit = 15; camera.upperRadiusLimit = 32; camera.lowerBetaLimit = 0.68; camera.upperBetaLimit = 1.38; camera.wheelPrecision = 90; camera.inertia = 0.8; camera.attachControl(canvas, true);
 
-  const materials: Materials = {
-    grass: mat(scene, "grass", "#8bdc9b"),
-    plaza: mat(scene, "plaza", "#f5d9c3"),
-    road: mat(scene, "road", "#a7c1cf"),
-    water: mat(scene, "water", "#49c8df", 0.25),
-    bark: mat(scene, "bark", "#9a674b"),
-    leaf: mat(scene, "leaf", "#49b97e"),
-    leaf2: mat(scene, "leaf2", "#8bdc86"),
-    coral: mat(scene, "coral", "#f08f7c"),
-    mint: mat(scene, "mint", "#83d8c4"),
-    yellow: mat(scene, "yellow", "#ffd36a"),
-    purple: mat(scene, "purple", "#a894df"),
-    door: mat(scene, "door", "#416176"),
-    window: mat(scene, "window", "#a9eff3", 0.2),
-    coin: mat(scene, "coin", "#ffd24d", 0.3),
-    star: mat(scene, "star", "#fff2a1", 0.2),
-    snow: mat(scene, "snow", "#f4fbff"),
-    shirt: mat(scene, "shirt", "#2db6aa"),
-    shoes: mat(scene, "shoes", "#f2a661"),
-    skin: mat(scene, "skin", "#f1b58a"),
-    hair: mat(scene, "hair", "#634a55"),
-    backpack: mat(scene, "backpack", "#f1bd44"),
-    eye: mat(scene, "eye", "#23334c"),
-    pet: mat(scene, "pet", "#e8995d"),
-    petAccent: mat(scene, "petAccent", "#f7d1a2"),
-    white: mat(scene, "white", "#ffffff"),
-  };
+  const ground = MeshBuilder.CreateGround("world-ground", { width: 100, height: 76, subdivisions: 4 }, scene); ground.material = materials.grass;
+  const centralRoad = box(scene, "east-west-road", { w: 94, h: 0.05, d: 2.2 }, new Vector3(0, 0.03, 0), materials.road); const northRoad = box(scene, "north-road", { w: 2.2, h: 0.05, d: 72 }, new Vector3(-2, 0.035, 0), materials.road);
+  const river = box(scene, "river", { w: 7.2, h: 0.08, d: 68 }, new Vector3(26, 0.02, 1), materials.water); river.rotation.y = 0.06;
+  const plaza = MeshBuilder.CreateGround("wondertown-square", { width: 19, height: 17 }, scene); plaza.position.set(0, 0.06, 0); plaza.material = materials.plaza;
+  const fountainBase = MeshBuilder.CreateCylinder("fountain", { diameter: 4.6, height: 0.58, tessellation: 24 }, scene); fountainBase.position.set(0, 0.3, 0); fountainBase.material = materials.white; const water = MeshBuilder.CreateCylinder("fountain-water", { diameter: 3.8, height: 0.12, tessellation: 24 }, scene); water.position.set(0, 0.64, 0); water.material = materials.water; const fountainGem = MeshBuilder.CreateSphere("fountain-gem", { diameter: 0.62, segments: 8 }, scene); fountainGem.position.set(0, 1.95, 0); fountainGem.material = materials.star; const stem = MeshBuilder.CreateCylinder("fountain-stem", { diameter: 0.5, height: 1.3, tessellation: 12 }, scene); stem.position.set(0, 1.2, 0); stem.material = materials.mint;
+  const townBuildings: [number, number, number, number, StandardMaterial, StandardMaterial, string, boolean][] = [[-9, -6, 3.8, 3.1, materials.coral, materials.yellow, "CAFÉ", true], [-10, 5, 3.7, 2.8, materials.mint, materials.purple, "PETS", true], [8, -6, 3.8, 3, materials.yellow, materials.coral, "STYLE", true], [8, 5, 4.2, 3.4, materials.purple, materials.mint, "ARCADE", true], [-14, -1, 4.5, 3.6, materials.blue, materials.white, "TOWN HALL", true], [13, 1, 3.9, 2.8, materials.coral, materials.yellow, "GROCERY", false], [-13, 9, 3.4, 2.5, materials.yellow, materials.blue, "SCHOOL", false], [8, 10, 3.8, 3, materials.mint, materials.coral, "FURNITURE", true], [15, -11, 4, 3, materials.blue, materials.yellow, "HOME 01", false], [9, -12, 4, 2.8, materials.coral, materials.mint, "HOME 02", false], [-15, -12, 4, 2.8, materials.mint, materials.coral, "HOME 03", false], [-4, 13, 4.2, 3.2, materials.purple, materials.yellow, "APARTMENTS", false]];
+  townBuildings.forEach((b) => building(scene, materials, ...b));
+  for (let i = 0; i < 18; i++) { const x = -21 + (i % 6) * 7; const z = -18 + Math.floor(i / 6) * 17; building(scene, materials, x, z, 2.7 + (i % 2) * 0.35, 2.1 + (i % 3) * 0.3, i % 2 ? materials.mint : materials.coral, i % 3 ? materials.yellow : materials.purple, `HOME ${i + 4}`, false); }
+  for (let x = -19; x <= 18; x += 6) { tree(scene, materials, x, -18, 0.72); tree(scene, materials, x + 2, 17, 0.68); }
+  bridge(scene, materials, 20, 0, Math.PI / 2); bridge(scene, materials, 20, -19, Math.PI / 2);
+  box(scene, "bus-stop", { w: 1.8, h: 2.2, d: 0.6 }, new Vector3(-5, 1.1, 7.5), materials.blue); box(scene, "bus-roof", { w: 2.2, h: 0.16, d: 0.9 }, new Vector3(-5, 2.28, 7.5), materials.yellow);
+  makeRegionLabel(scene, materials, "WONDERTOWN", 0, 19, materials.yellow);
 
-  const hemi = new HemisphericLight("sunny-fill", new Vector3(0, 1, 0), scene);
-  hemi.intensity = 0.62;
-  hemi.diffuse = new Color3(1, 0.94, 0.84);
-  const sun = new DirectionalLight("sun", new Vector3(-0.45, -1, 0.55), scene);
-  sun.position = new Vector3(-15, 24, -18);
-  sun.intensity = 0.72;
+  // Adventure Forest, with optimized repeated geometry and a campsite, ranger station, cave, and temple.
+  for (let i = 0; i < 95; i++) { const x = -42 + ((i * 17) % 29); const z = -31 + ((i * 23) % 28); tree(scene, materials, x, z, 0.56 + (i % 4) * 0.1); }
+  const forestPath = box(scene, "forest-path", { w: 3.2, h: 0.06, d: 31 }, new Vector3(-30, 0.08, -28), materials.wood); forestPath.rotation.y = -0.22; bridge(scene, materials, -29, -20, 0.1); building(scene, materials, -38, -27, 4.5, 2.7, materials.mint, materials.yellow, "RANGER", true); building(scene, materials, -26, -38, 5, 3.2, materials.purple, materials.mint, "TREEHOUSE", false); makeRegionLabel(scene, materials, "ADVENTURE FOREST", -31, -14, materials.mint);
+  const cave = MeshBuilder.CreateTorus("forest-cave", { diameter: 3.4, thickness: 0.6, tessellation: 12 }, scene); cave.position.set(-39, 1.4, -39); cave.rotation.x = Math.PI / 2; cave.material = materials.bark; const temple = building(scene, materials, -25, -28, 5.5, 4, materials.blue, materials.purple, "LOST TEMPLE", true); temple.rotation.y = Math.PI / 4;
 
-  const camera = new ArcRotateCamera("camera", -Math.PI / 2.1, 1.08, 25, new Vector3(0, 1.4, 0), scene);
-  camera.lowerRadiusLimit = 19;
-  camera.upperRadiusLimit = 32;
-  camera.lowerBetaLimit = 0.72;
-  camera.upperBetaLimit = 1.35;
-  camera.wheelPrecision = 120;
-  camera.attachControl(canvas, true);
+  // Sunny Beach and boardwalk.
+  const sand = MeshBuilder.CreateGround("sunny-beach", { width: 23, height: 31 }, scene); sand.position.set(39, 0.05, -24); sand.material = materials.yellow; const ocean = MeshBuilder.CreateGround("ocean", { width: 30, height: 32 }, scene); ocean.position.set(47, 0.02, -17); ocean.material = materials.water; const boardwalk = box(scene, "boardwalk", { w: 18, h: 0.12, d: 2.5 }, new Vector3(37, 0.18, -10), materials.wood); for (let i = 0; i < 18; i++) tree(scene, materials, 31 + (i % 6) * 4, -34 + Math.floor(i / 6) * 4, 0.62); building(scene, materials, 33, -23, 4.5, 2.8, materials.coral, materials.yellow, "BEACH CAFÉ", true); building(scene, materials, 43, -30, 4, 2.6, materials.mint, materials.coral, "LIFEGUARD", true); bridge(scene, materials, 31, -11, 0); makeRegionLabel(scene, materials, "SUNNY BEACH", 41, -2, materials.yellow);
+  const pier = box(scene, "pier", { w: 2.8, h: 0.14, d: 11 }, new Vector3(50, 0.18, -18), materials.wood); for (let i = 0; i < 6; i++) box(scene, "pier-post", { w: 0.18, h: 1.2, d: 0.18 }, new Vector3(49 + (i % 2), 0.3, -23 + i * 2), materials.bark);
+  const volleyball = MeshBuilder.CreateTorus("volleyball-court", { diameter: 7, thickness: 0.08, tessellation: 32 }, scene); volleyball.position.set(31, 0.1, -30); volleyball.rotation.x = Math.PI / 2; volleyball.material = materials.white;
 
-  const ground = MeshBuilder.CreateGround("wonderworld-ground", { width: 42, height: 30, subdivisions: 2 }, scene);
-  ground.material = materials.grass;
-  const plaza = MeshBuilder.CreateGround("town-plaza", { width: 17, height: 14 }, scene);
-  plaza.position.y = 0.015;
-  plaza.material = materials.plaza;
-  const roadH = box(scene, "road-h", { w: 40, h: 0.04, d: 1.6 }, new Vector3(0, 0.02, 1), materials.road);
-  const roadV = box(scene, "road-v", { w: 1.6, h: 0.04, d: 29 }, new Vector3(-5, 0.025, 0), materials.road);
-  roadH.material = materials.road; roadV.material = materials.road;
+  // Sky Mountain.
+  const mountain = MeshBuilder.CreateCylinder("sky-mountain", { diameter: 18, height: 11, tessellation: 5 }, scene); mountain.position.set(39, 5, 22); mountain.rotation.y = 0.25; mountain.material = materials.purple; const snowcap = MeshBuilder.CreateCylinder("mountain-snow", { diameter: 9, height: 2.5, tessellation: 5 }, scene); snowcap.position.set(39, 11.2, 22); snowcap.rotation.y = 0.25; snowcap.material = materials.snow; building(scene, materials, 29, 30, 5, 3.2, materials.mint, materials.blue, "MOUNTAIN VILLAGE", true); building(scene, materials, 48, 30, 4.8, 3.2, materials.blue, materials.snow, "OBSERVATORY", true); const cable = box(scene, "cable-car-line", { w: 0.11, h: 0.11, d: 19 }, new Vector3(39, 12, 22), materials.bark); cable.rotation.x = Math.PI / 2; makeRegionLabel(scene, materials, "SKY MOUNTAIN", 39, 11, materials.snow);
+  for (let i = 0; i < 26; i++) coin(scene, materials, new Vector3(29 + (i % 6) * 3.6, 0.5 + (i % 3) * 0.15, 15 + Math.floor(i / 6) * 3.2), "crystal");
 
-  const fountainBase = MeshBuilder.CreateCylinder("fountain-base", { diameter: 4.1, height: 0.55, tessellation: 24 }, scene);
-  fountainBase.position.set(0, 0.28, 0.2); fountainBase.material = materials.white;
-  const fountainWater = MeshBuilder.CreateCylinder("fountain-water", { diameter: 3.45, height: 0.12, tessellation: 24 }, scene);
-  fountainWater.position.set(0, 0.59, 0.2); fountainWater.material = materials.water;
-  const fountainStem = MeshBuilder.CreateCylinder("fountain-stem", { diameter: 0.55, height: 1.2, tessellation: 12 }, scene);
-  fountainStem.position.set(0, 1.15, 0.2); fountainStem.material = materials.mint;
-  const fountainGem = MeshBuilder.CreateSphere("fountain-gem", { diameter: 0.65, segments: 8 }, scene);
-  fountainGem.position.set(0, 1.85, 0.2); fountainGem.material = materials.star;
+  // Fun Park.
+  const parkGround = MeshBuilder.CreateGround("fun-park", { width: 24, height: 24 }, scene); parkGround.position.set(-38, 0.07, 20); parkGround.material = materials.grass2; makeRegionLabel(scene, materials, "FUN PARK", -38, 7, materials.coral);
+  const wheelRoot = new TransformNode("ferris-wheel", scene); wheelRoot.position.set(-44, 5, 22); const wheel = MeshBuilder.CreateTorus("ferris-wheel-ring", { diameter: 8, thickness: 0.22, tessellation: 24 }, scene); wheel.rotation.y = Math.PI / 2; wheel.material = materials.coral; wheel.parent = wheelRoot; const hub = MeshBuilder.CreateSphere("ferris-hub", { diameter: 0.5 }, scene); hub.material = materials.yellow; hub.parent = wheelRoot; for (let i = 0; i < 8; i++) { const spoke = box(scene, "wheel-spoke", { w: 0.12, h: 0.12, d: 3.8 }, new Vector3(0, Math.sin(i * Math.PI / 4) * 1.9, Math.cos(i * Math.PI / 4) * 1.9), materials.mint, wheelRoot); spoke.rotation.x = i * Math.PI / 4; }
+  const track = MeshBuilder.CreateTorus("racing-track", { diameter: 12, thickness: 0.35, tessellation: 24 }, scene); track.position.set(-34, 0.2, 24); track.rotation.x = Math.PI / 2; track.material = materials.purple; building(scene, materials, -34, 15, 5, 3.3, materials.coral, materials.yellow, "ARCADE", true); building(scene, materials, -45, 14, 4, 2.8, materials.yellow, materials.mint, "PRIZES", true);
 
-  building(scene, materials, -8, -3.7, materials.coral, materials.yellow, 1.05);
-  building(scene, materials, -8.5, 5.5, materials.mint, materials.purple, 0.88);
-  building(scene, materials, 7.5, -4.2, materials.yellow, materials.coral, 0.95);
-  building(scene, materials, 7.8, 5.3, materials.purple, materials.mint, 0.9);
+  // Mystery Valley is gated until level 10, with glowing flora and ruins.
+  const valley = MeshBuilder.CreateGround("mystery-valley", { width: 24, height: 23 }, scene); valley.position.set(-37, 0.08, -21); valley.material = materials.blue; makeRegionLabel(scene, materials, "MYSTERY VALLEY • LV 10", -37, -8, materials.gem);
+  for (let i = 0; i < 18; i++) { tree(scene, materials, -47 + (i % 6) * 4, -28 + Math.floor(i / 6) * 4, 0.65, "glow"); const flower = MeshBuilder.CreateSphere("glowing-flower", { diameter: 0.45, segments: 8 }, scene); flower.position.set(-48 + (i % 6) * 4, 0.35, -29 + Math.floor(i / 6) * 4); flower.material = materials.gem; }
+  for (let i = 0; i < 4; i++) { const arch = MeshBuilder.CreateTorus("ruin-arch", { diameter: 3.3, thickness: 0.5, tessellation: 10 }, scene); arch.position.set(-38 + i * 4, 1.7, -27 + (i % 2) * 7); arch.rotation.x = Math.PI / 2; arch.material = materials.bark; }
 
-  // Forest zone
-  [-15, -12, -9, -14, -11, -7].forEach((x, i) => tree(scene, materials, x, -8.5 + (i % 2) * 1.8, 0.9 + (i % 3) * 0.12));
-  [-16, -13, -10].forEach((x, i) => tree(scene, materials, x, 9 + (i % 2) * 1.4, 1.0));
-  // Beach zone
-  const beach = MeshBuilder.CreateGround("sunny-beach", { width: 14, height: 8 }, scene);
-  beach.position.set(13, 0.02, -5.5); beach.material = materials.yellow;
-  const ocean = MeshBuilder.CreateGround("ocean", { width: 18, height: 8 }, scene);
-  ocean.position.set(16, 0, 4.5); ocean.material = materials.water;
-  [11, 15, 18].forEach((x, i) => tree(scene, materials, x, -8.5 + i * 0.9, 0.8));
-  // Mountain silhouette
-  const mountain = MeshBuilder.CreateCylinder("sky-mountain", { diameter: 8.5, height: 5.5, tessellation: 4 }, scene);
-  mountain.position.set(14, 2.6, 10); mountain.rotation.y = Math.PI / 4; mountain.material = materials.purple;
-  const snowcap = MeshBuilder.CreateCylinder("snow-cap", { diameter: 4.4, height: 1.6, tessellation: 4 }, scene);
-  snowcap.position.set(14, 6.1, 10); snowcap.rotation.y = Math.PI / 4; snowcap.material = materials.snow;
-  // Park trees & benches
-  [2.5, 5, 7.5].forEach((x) => tree(scene, materials, x, 9.8, 0.7));
-  box(scene, "bench-seat", { w: 2.2, h: 0.22, d: 0.6 }, new Vector3(3, 0.8, 4.5), materials.bark);
-  box(scene, "bench-back", { w: 2.2, h: 0.75, d: 0.15 }, new Vector3(3, 1.1, 4.75), materials.bark);
+  // Explorer and follower.
+  const player = new TransformNode("explorer", scene); player.position.set(0, 0, 5.8); const feet = box(scene, "feet", { w: 0.72, h: 0.25, d: 0.48 }, new Vector3(0, 0.14, 0), materials.shoes, player); feet.rotation.y = Math.PI / 2; const body = MeshBuilder.CreateCapsule("body", { height: 1.25, radius: 0.43, tessellation: 8 }, scene); body.position.y = 1.02; body.material = materials.shirt; body.parent = player; const head = MeshBuilder.CreateSphere("head", { diameter: 0.9, segments: 12 }, scene); head.position.y = 1.95; head.material = materials.skin; head.parent = player; const hair = MeshBuilder.CreateSphere("hair", { diameter: 0.94, segments: 12 }, scene); hair.scaling.y = 0.52; hair.position.y = 2.3; hair.material = materials.hair; hair.parent = player; box(scene, "backpack", { w: 0.68, h: 0.82, d: 0.25 }, new Vector3(0, 1.15, 0.46), materials.backpack, player); [-0.18, 0.18].forEach((x) => { const eye = MeshBuilder.CreateSphere("eye", { diameter: 0.11 }, scene); eye.position.set(x, 2, -0.4); eye.material = materials.eye; eye.parent = player; }); const pet = new TransformNode("pet", scene); pet.position.set(1.45, 0, 6.3); const petBody = MeshBuilder.CreateSphere("pet-body", { diameter: 0.9, segments: 10 }, scene); petBody.scaling.y = 0.72; petBody.position.y = 0.52; petBody.material = materials.pet; petBody.parent = pet; const petHead = MeshBuilder.CreateSphere("pet-head", { diameter: 0.78, segments: 10 }, scene); petHead.position.y = 1.02; petHead.material = materials.pet; petHead.parent = pet; [-0.3, 0.3].forEach((x) => { const ear = MeshBuilder.CreateCylinder("pet-ear", { diameter: 0.25, height: 0.36, tessellation: 6 }, scene); ear.position.set(x, 1.38, 0); ear.rotation.z = x < 0 ? -0.3 : 0.3; ear.material = materials.pet; ear.parent = pet; }); camera.lockedTarget = player;
 
-  const player = createPlayer(scene, materials);
-  const pet = createPet(scene, materials);
-  camera.lockedTarget = player;
+  const collectibles: Mesh[] = []; const spawn = (type: "coin" | "star" | "shell" | "crystal" | "gem", points: Vector3[]) => points.forEach((p) => collectibles.push(coin(scene, materials, p, type))); spawn("coin", [new Vector3(-4, 0.5, -1), new Vector3(4, 0.5, -1), new Vector3(14, 0.5, 2), new Vector3(-16, 0.5, 4), new Vector3(10, 0.5, 10), new Vector3(-8, 0.5, 13), new Vector3(-32, 0.5, 0)]); spawn("star", [new Vector3(-30, 0.75, -22), new Vector3(-36, 0.75, -31), new Vector3(-44, 0.75, -18), new Vector3(-23, 0.75, -36), new Vector3(-34, 0.75, -40), new Vector3(-28, 0.75, -27)]); spawn("shell", [new Vector3(31, 0.5, -22), new Vector3(36, 0.5, -29), new Vector3(43, 0.5, -15), new Vector3(48, 0.5, -26), new Vector3(38, 0.5, -34)]); spawn("gem", [new Vector3(-43, 0.7, -15), new Vector3(-35, 0.7, -26), new Vector3(-43, 0.7, -32)]);
+  const npcs = [npc(scene, materials, -2.5, 4, materials.coral, "Mayor Mallow", "WonderTown"), npc(scene, materials, -37, -25, materials.mint, "Ranger Robin", "Adventure Forest"), npc(scene, materials, 34, -22, materials.yellow, "Captain Sunny", "Sunny Beach"), npc(scene, materials, 33, 28, materials.blue, "Mountain Guide Max", "Sky Mountain"), npc(scene, materials, -40, 15, materials.purple, "Arcade Manager Alex", "Fun Park"), npc(scene, materials, -38, -17, materials.gem, "Mystery Sage Mira", "Mystery Valley"), npc(scene, materials, -9, 5, materials.mint, "Pet Keeper Poppy", "WonderTown"), npc(scene, materials, 9, 5, materials.coral, "House Designer Hazel", "WonderTown"), npc(scene, materials, -14, 8, materials.blue, "Professor Pine", "WonderTown"), npc(scene, materials, 14, -5, materials.yellow, "Grocery Guide Gigi", "WonderTown"), npc(scene, materials, 30, -31, materials.coral, "Lifeguard Luna", "Sunny Beach"), npc(scene, materials, 41, 29, materials.mint, "Astronomer Orion", "Sky Mountain"), npc(scene, materials, -44, 15, materials.yellow, "Prize Host Pippa", "Fun Park"), npc(scene, materials, -31, -28, materials.purple, "Temple Tessa", "Adventure Forest"), npc(scene, materials, -44, -24, materials.gem, "Glow Gardener Glow", "Mystery Valley")];
 
-  const coins = [new Vector3(-4, 0.45, -1.2), new Vector3(4, 0.45, -1.2), new Vector3(2.7, 0.45, 5.7), new Vector3(-2.6, 0.45, 6.5), new Vector3(9.5, 0.45, -2.1), new Vector3(13, 0.45, -4.4)];
-  const coinMeshes = coins.map((p) => coin(scene, materials, p));
-  const stars = [new Vector3(-10.3, 1.15, -6.8), new Vector3(-13.2, 1.2, -7.9), new Vector3(-15.1, 1.15, 8.2), new Vector3(-10.1, 1.1, 9.5), new Vector3(-6.8, 1.2, -8.2)].map((p) => star(scene, materials, p));
-
-  const keys = new Set<string>();
-  let jumpTime = 0;
-  let totalCoins = 620;
-  let starsFound = 0;
-  let disposed = false;
-  let speed = 3.6;
-  const onKeyDown = (e: KeyboardEvent) => { keys.add(e.key.toLowerCase()); if (e.key === " ") jumpTime = 0.42; };
-  const onKeyUp = (e: KeyboardEvent) => keys.delete(e.key.toLowerCase());
-  const onAction = (event: Event) => {
-    const detail = (event as CustomEvent<ActionDetail>).detail;
-    if (!detail) return;
-    if (detail.type === "move") {
-      const dx = Number(detail.value?.split(",")[0] ?? 0);
-      const dz = Number(detail.value?.split(",")[1] ?? 0);
-      player.position.x += dx * 0.45;
-      player.position.z += dz * 0.45;
-    }
-    if (detail.type === "teleport") {
-      const spots: Record<string, Vector3> = { town: new Vector3(0, 0, 5.5), forest: new Vector3(-11, 0, -7), beach: new Vector3(12, 0, -5), mountain: new Vector3(14, 0, 9) };
-      const spot = spots[detail.value ?? "town"] ?? spots.town;
-      player.position.copyFrom(spot);
-      emit("ww-toast", { message: `Welcome to ${detail.value === "forest" ? "Adventure Forest" : detail.value === "beach" ? "Sunny Beach" : detail.value === "mountain" ? "Sky Mountain" : "WonderTown"}!` });
-    }
-    if (detail.type === "outfit") {
-      const outfit = detail.value ?? "teal";
-      materials.shirt.diffuseColor = Color3.FromHexString(outfit === "coral" ? "#f08f7c" : outfit === "sunny" ? "#ffd36a" : "#2db6aa");
-      emit("ww-toast", { message: "Outfit updated! Looking brilliant, Explorer." });
-    }
-    if (detail.type === "reward") {
-      const amount = Number(detail.value ?? 50);
-      totalCoins += amount;
-      emit("ww-coins", { coins: totalCoins });
-    }
-  };
-  window.addEventListener("keydown", onKeyDown);
-  window.addEventListener("keyup", onKeyUp);
-  window.addEventListener("ww-action", onAction);
-  emit("ww-coins", { coins: totalCoins });
-  emit("ww-world-ready", { ready: true });
-
-  const observer = scene.onBeforeRenderObservable.add(() => {
-    const dt = Math.min(scene.getEngine().getDeltaTime() / 1000, 0.05);
-    const move = new Vector3(0, 0, 0);
-    if (keys.has("w") || keys.has("arrowup")) move.z -= 1;
-    if (keys.has("s") || keys.has("arrowdown")) move.z += 1;
-    if (keys.has("a") || keys.has("arrowleft")) move.x -= 1;
-    if (keys.has("d") || keys.has("arrowright")) move.x += 1;
-    if (move.lengthSquared() > 0) {
-      move.normalize().scaleInPlace(speed * dt);
-      player.position.addInPlace(move);
-      player.rotation.y = Math.atan2(move.x, move.z);
-    }
-    player.position.x = Math.max(-18, Math.min(18, player.position.x));
-    player.position.z = Math.max(-12, Math.min(12, player.position.z));
-    if (jumpTime > 0) {
-      jumpTime -= dt;
-      player.position.y = Math.sin(Math.max(0, jumpTime) / 0.42 * Math.PI) * 0.9;
-    } else player.position.y = 0;
-    pet.position.x += (player.position.x + 1.2 - pet.position.x) * Math.min(1, dt * 3.5);
-    pet.position.z += (player.position.z + 1.0 - pet.position.z) * Math.min(1, dt * 3.5);
-    pet.position.y = Math.sin(performance.now() / 380) * 0.04;
-    coinMeshes.forEach((c, i) => { c.rotation.y += dt * 3; if (c.isVisible && Vector3.Distance(c.position, player.position) < 1.1) { c.isVisible = false; totalCoins += 25; emit("ww-coins", { coins: totalCoins }); emit("ww-toast", { message: "+25 Wonder Coins!" }); } });
-    stars.forEach((s) => { s.rotation.y += dt * 2; if (s.isVisible && Vector3.Distance(s.position, player.position) < 1.25) { s.isVisible = false; starsFound += 1; totalCoins += 20; emit("ww-quest-progress", { stars: starsFound }); emit("ww-coins", { coins: totalCoins }); emit("ww-toast", { message: `Lost Star found! ${starsFound}/5` }); } });
-  });
-
-  return {
-    scene,
-    dispose: () => {
-      if (disposed) return;
-      disposed = true;
-      scene.onBeforeRenderObservable.remove(observer);
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-      window.removeEventListener("ww-action", onAction);
-      camera.detachControl();
-      scene.dispose();
-    },
-  };
+  const save = loadSave(); let level = save.level; let xp = save.xp; let totalCoins = save.coins; let region = save.region; let stars = save.stars; let shells = save.shells; let crystals = save.crystals; let gems = save.gems; let dayClock = 0.25; let disposed = false; const keys = new Set<string>(); const touchMove = { x: 0, z: 0 }; let jumpTime = 0; let interactPulse = 0;
+  const regions: Record<string, Vector3> = { WonderTown: new Vector3(0, 0, 5.8), "Adventure Forest": new Vector3(-31, 0, -22), "Sunny Beach": new Vector3(38, 0, -24), "Sky Mountain": new Vector3(39, 0, 22), "Fun Park": new Vector3(-38, 0, 20), "Mystery Valley": new Vector3(-37, 0, -21) };
+  const addXp = (amount: number) => { xp += amount; const next = level * 250; if (xp >= next && level < 50) { level += 1; xp -= next; emit("ww-level-up", { level }); emit("ww-toast", { message: `Level ${level}! ${level >= 10 ? "Mystery Valley is calling." : "New adventure rank unlocked."}` }); } emit("ww-profile", { level, xp, xpNext: level * 250 }); persist({ ...save, level, xp, coins: totalCoins, region, stars, shells, crystals, gems, unlocked: level >= 10 ? Array.from(new Set([...save.unlocked, "Mystery Valley"])) : save.unlocked }); };
+  const onKeyDown = (e: KeyboardEvent) => { keys.add(e.key.toLowerCase()); if (e.key === " ") jumpTime = 0.5; if (e.key.toLowerCase() === "e") interactPulse = 0.45; }; const onKeyUp = (e: KeyboardEvent) => keys.delete(e.key.toLowerCase());
+  const onAction = (event: Event) => { const detail = (event as CustomEvent<ActionDetail>).detail; if (!detail) return; if (detail.type === "move") { const [dx, dz] = (detail.value || "0,0").split(",").map(Number); touchMove.x = dx; touchMove.z = dz; player.position.x += dx * 0.55; player.position.z += dz * 0.55; } if (detail.type === "jump") jumpTime = 0.5; if (detail.type === "interact") interactPulse = 0.6; if (detail.type === "sprint") emit("ww-toast", { message: "Sprint boost ready! Hold the pad to explore faster." }); if (detail.type === "teleport") { const target = detail.value || "WonderTown"; if (target === "Mystery Valley" && level < 10) { emit("ww-toast", { message: "Reach Level 10 to unlock Mystery Valley." }); return; } const spot = regions[target] || regions.WonderTown; player.position.copyFrom(spot); region = target; emit("ww-region", { region }); emit("ww-toast", { message: `Arrived at ${target}. Discover something new!` }); addXp(35); } if (detail.type === "reward") { const amount = Number(detail.value || 50); totalCoins += amount; addXp(Math.round(amount / 2)); emit("ww-coins", { coins: totalCoins }); emit("ww-toast", { message: `+${amount} Wonder Coins • +${Math.round(amount / 2)} XP` }); } if (detail.type === "outfit") emit("ww-toast", { message: "Style saved to your Explorer profile." }); };
+  window.addEventListener("keydown", onKeyDown); window.addEventListener("keyup", onKeyUp); window.addEventListener("ww-action", onAction); emit("ww-coins", { coins: totalCoins }); emit("ww-profile", { level, xp, xpNext: level * 250 }); emit("ww-region", { region }); emit("ww-collectibles", { stars, shells, crystals, gems });
+  const observer = scene.onBeforeRenderObservable.add(() => { const dt = Math.min(scene.getEngine().getDeltaTime() / 1000, 0.05); dayClock = (dayClock + dt * 0.012) % 1; const sunPhase = Math.sin(dayClock * Math.PI * 2); sun.intensity = 0.55 + Math.max(0, sunPhase) * 0.45; hemi.intensity = 0.48 + Math.max(0, sunPhase) * 0.22; scene.clearColor = new Color4(0.34 + Math.max(0, sunPhase) * 0.17, 0.58 + Math.max(0, sunPhase) * 0.22, 0.77 + Math.max(0, sunPhase) * 0.18, 1); const move = new Vector3(0, 0, 0); if (keys.has("w") || keys.has("arrowup")) move.z -= 1; if (keys.has("s") || keys.has("arrowdown")) move.z += 1; if (keys.has("a") || keys.has("arrowleft")) move.x -= 1; if (keys.has("d") || keys.has("arrowright")) move.x += 1; move.x += touchMove.x * 0.72; move.z += touchMove.z * 0.72; const sprinting = keys.has("shift"); if (move.lengthSquared() > 0) { move.normalize().scaleInPlace((sprinting ? 7.2 : 4.1) * dt); player.position.addInPlace(move); player.rotation.y = Math.atan2(move.x, move.z); } player.position.x = Math.max(-47, Math.min(52, player.position.x)); player.position.z = Math.max(-39, Math.min(34, player.position.z)); if (jumpTime > 0) { jumpTime -= dt; player.position.y = Math.sin(Math.max(0, jumpTime) / 0.5 * Math.PI) * 0.9; } else player.position.y = 0; pet.position.x += (player.position.x + 1.25 - pet.position.x) * Math.min(1, dt * 3.5); pet.position.z += (player.position.z + 1.0 - pet.position.z) * Math.min(1, dt * 3.5); pet.position.y = Math.sin(performance.now() / 360) * 0.05; interactPulse = Math.max(0, interactPulse - dt); npcs.forEach((n, index) => { n.position.y = Math.sin(performance.now() / 480 + index) * 0.035; }); wheelRoot.rotation.z += dt * 0.2; collectibles.forEach((c) => { c.rotation.y += dt * 2.2; if (c.isVisible && Vector3.Distance(c.position, player.position) < 1.15) { c.isVisible = false; const type = c.metadata?.collectibleType as string; if (type === "star") stars += 1; if (type === "shell") shells += 1; if (type === "crystal") crystals += 1; if (type === "gem") gems += 1; totalCoins += type === "gem" ? 80 : 25; addXp(18); emit("ww-coins", { coins: totalCoins }); emit("ww-collectibles", { stars, shells, crystals, gems }); emit("ww-toast", { message: `${type === "star" ? "Wonder Star" : type === "shell" ? "Beach Shell" : type === "crystal" ? "Mountain Crystal" : type === "gem" ? "Mystery Gem" : "Wonder Coin"} collected!` }); } }); if (interactPulse > 0) { const near = npcs.find((n) => Vector3.Distance(n.position, player.position) < 2.2); if (near) { const data = near.metadata as { name: string; region: string }; emit("ww-dialogue", { name: data.name, message: `${data.name}: ${data.name === "Ranger Robin" ? "The forest badges are sparkling somewhere along the river." : data.name === "Captain Sunny" ? "The beach is perfect for a shell hunt today!" : `Welcome to ${data.region}. I saved a quest for you!`}` }); interactPulse = 0; } } });
+  return { scene, dispose: () => { if (disposed) return; disposed = true; scene.onBeforeRenderObservable.remove(observer); window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); window.removeEventListener("ww-action", onAction); camera.detachControl(); scene.dispose(); } };
 }

@@ -1,22 +1,20 @@
-# WonderWorld: Adventure City — Vertical Slice Plan
+# WonderWorld: Adventure City — Major Expansion Plan
 
 ## Scope
-Build a complete, original, family-friendly browser-playable vertical slice inspired by social sandbox adventures without copying any protected IP. The slice targets Android landscape interaction and is structured so online systems can be added later.
+Expand the original WonderTown vertical slice into a genuinely explorable multi-region 3D adventure sandbox while keeping the world original, safe, and Android-oriented. The current release is a substantial browser-playable world slice, not a claim that every future online or native-store feature is complete.
 
-## Risk slices
-1. **3D scene lifecycle:** Babylon.js runs through a React-owned canvas with strict cleanup and a stable render loop.
-2. **Touch-first play:** DOM HUD provides a virtual movement pad, large buttons, and keyboard fallback for desktop testing.
-3. **Repeatable progression:** deterministic quests, collectibles, rewards, pets, outfits, and three mini-game loops use clear, non-gambling progression.
-4. **Visual cohesion:** procedural low-poly geometry is paired with a generated WonderWorld art-direction backdrop.
+## Implemented expansion
+The Babylon world now spans a 100m x 76m connected map with WonderTown, Adventure Forest, Sunny Beach, Sky Mountain, Fun Park, and a gated Mystery Valley. WonderTown has a central square, fountain, streets, 30 visually distinct building shells with doors/windows/roofs/sign metadata, town NPCs, homes, apartments, a bus stop, roads, river bridges, and props. Each outer region includes its own landmarks, paths, buildings, collectibles, and environmental identity.
+
+The gameplay layer includes a third-person ArcRotate camera, keyboard movement, sprint, jump, touch movement pad, jump/interact/sprint buttons, follow pet motion, NPC dialogue, fast travel, day-light cycling, local save state, coins, XP, levels to 50, four collectible families, five mini-game replay loops, 30+ quest entries through the quest log, a 25-entry achievement list, daily activities, map unlock gating, inventory, character styling, pet roster, home decoration, and progression rewards.
 
 ## Verification criteria
-- The preview opens into a readable WonderTown scene with fountain, buildings, forest, beach, mountain, collectibles, player, and pet.
-- WASD/arrow controls move the explorer, Space hops, and the virtual pad moves the player.
-- Coins and Lost Stars visibly update when the player collects them.
-- Quest Board, Mini-Games, Style Studio, Cozy Home, and travel map panels are playable.
-- `pnpm check` and `pnpm build` pass.
-- Screenshot verification confirms the game reads as a finished mobile-oriented experience.
+- The world reads as a large connected space rather than a tiny showcase.
+- Travel map moves the player to multiple regions and gates Mystery Valley below Level 10.
+- Collectibles, NPC interaction, XP, coins, and level signals update through real game events.
+- Quest, mini-game, home, character, pets, map, inventory, achievements, and daily panels are functional.
+- Progress persists through localStorage on the same device.
+- TypeScript and production build pass, and desktop/tablet screenshots show the world as the visual focus.
 
-## Asset assignments
-- WonderWorld generated reference/backdrop: `/manus-storage/wonderworld-reference_9853872f.png` — used as the branded art wash behind the 3D scene.
-- All world props are intentionally lightweight procedural meshes to preserve low/mid-range device performance.
+## Future production stages
+The next native Android stage should add a proper AAB wrapper, platform manifests, sound assets, more authored animation clips, richer collision/LOD treatment, and online account/multiplayer services. Those require a dedicated packaging and backend pass rather than pretending a static WebDev preview is already a Play Store build.
